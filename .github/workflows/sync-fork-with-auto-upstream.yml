@@ -21,7 +21,6 @@ jobs:
           echo "仓库所有者: ${{ github.repository_owner }}"
           echo "仓库名称: ${{ github.event.repository.name }}"
 
-          # 获取当前仓库信息，含默认分支和是否是 Fork
           REPO_INFO=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             https://api.github.com/repos/${{ github.repository }})
 
@@ -73,9 +72,12 @@ jobs:
 
           git remote add upstream https://github.com/$UPSTREAM_REPO.git
 
+          # 将源仓库默认分支也输出为 GitHub Output，供后续步骤使用
+          echo "upstream_default_branch=$UPSTREAM_DEFAULT_BRANCH" >> $GITHUB_OUTPUT
+
       - name: Fetch upstream（代码 + Tags）
         run: |
-          UPSTREAM_DEFAULT_BRANCH=${{ steps.repo_info.outputs.upstream_default_branch || 'main' }}
+          UPSTREAM_DEFAULT_BRANCH=${{ steps.repo_info.outputs.upstream_default_branch }}
           echo "🔁 获取源仓库代码和 Tags（分支: $UPSTREAM_DEFAULT_BRANCH）"
           git fetch upstream --tags
 
@@ -83,6 +85,15 @@ jobs:
         run: |
           git push origin --tags
 
-      - name: Merge upstream/{{ steps.repo_info.outputs.upstream_default_branch || 'main' }}
+      - name: Merge upstream/{{ steps.repo_info.outputs.upstream_default_branch }}
         run: |
-          UPSTREAM_DEFAULT_BRANCH=${
+          UPSTREAM_DEFAULT_BRANCH=${{ steps.repo_info.outputs.upstream_default_branch }}
+          echo "🔀 合并源仓库分支: upstream/$UPSTREAM_DEFAULT_BRANCH"
+          git merge upstream/$UPSTREAM_DEFAULT_BRANCH --allow-unrelated-histories -X theirs || echo "Already up-to-date or no changes"
+
+      - name: Push code to your fork (当前默认分支)
+        run: |
+          DEFAULT_BRANCH=${{ steps.repo_info.outputs.default_branch }}
+          echo "📤 推送代码到你的 fork（分支: $DEFAULT_BRANCH）"
+          git remote set-url origin https://${{ secrets.MY_GIT_TOKEN }}@github.com/${{ github.repository }}.git
+          git push origin $DEFAULT_BRANCH
